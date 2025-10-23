@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚌 Tracking Bus | Student Dashboard</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<style>
+    /* Define colors for the student dashboard theme */
+    :root {
+        --primary-color: #3f51b5; /* Indigo */
+        --secondary-color: #ff9800; /* Orange/Amber */
+        --background-light: #f4f6f9;
+        --text-dark: #212121;
+        --info-background: #ffffff;
+        --border-color: #e0e0e0;
+    }
+
+    body {
+        font-family: 'Roboto', sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: var(--background-light);
+        color: var(--text-dark);
+        display: flex;
+        flex-direction: column;
+        height: 100vh; /* Make the body take full viewport height */
+        overflow: hidden; /* Prevent scrolling */
+    }
+
+    /* Full-width header */
+    #tracker-header {
+        background-color: var(--primary-color);
+        color: white;
+        padding: 15px 20px;
+        display: flex;
+        align-items: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        z-index: 1000; /* Ensure it's above the map */
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    #backButton {
+        background: none;
+        border: 2px solid white;
+        color: white;
+        padding: 5px 15px;
+        margin-right: 15px;
+        cursor: pointer;
+        border-radius: 5px;
+        font-size: 1rem;
+        transition: background-color 0.2s;
+        text-transform: uppercase;
+        font-weight: 500;
+    }
+
+    #backButton:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    #headerText {
+        font-size: 1.3rem;
+        font-weight: 500;
+        flex-grow: 1;
+    }
+
+    /* Full-screen map */
+    #map {
+        flex-grow: 1; /* Map takes all remaining vertical space */
+        width: 100%;
+        z-index: 1;
+    }
+
+    /* Info bar */
+    #info {
+        background-color: var(--info-background);
+        color: var(--text-dark);
+        padding: 15px 20px;
+        font-size: 1.1rem;
+        font-weight: 500;
+        text-align: center;
+        border-top: 1px solid var(--border-color);
+        box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
+        z-index: 10;
+    }
+
+    /* Custom Leaflet Icons Styling */
+    .bus-icon {
+        /* Style for the bus emoji */
+        font-size: 1.8rem;
+        color: var(--secondary-color); /* Amber color for the bus */
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    }
+    .student-icon div {
+        /* Styling the student marker (overrides the inline 'blue' color from JS) */
+        background-color: #4CAF50 !important; /* Green for 'You' */
+        border: 3px solid white !important;
+        box-shadow: 0 0 0 2px #4CAF50;
+    }
+    
+    /* Pop-up style for better visibility */
+    .leaflet-popup-content-wrapper {
+        border-radius: 8px !important;
+    }
+    .leaflet-popup-content {
+        font-weight: 500;
+        font-size: 0.95rem;
+    }
+    
+    /* Route line color from JS is #FFC107 (Amber), keeping that for consistency */
+</style>
+
+</head>
+<body>
+
+<div id="tracker-header">
+    <button id="backButton" onclick="window.location.href='index.html'">&#9664; Select Bus</button>
+    <span id="headerText">Tracking Bus...</span>
+</div>
+
+<div id="map"></div>
+<div id="info">Loading bus location...</div>
+
+
+<script>
+const geoApiKey = "04aaf602f38946b0b3a34f2b37bb5633";
+
+// Firebase setup
+const firebaseConfig = {
+    apiKey: "AIzaSyCYYUoSTCBRAZ7DRctIKPkXN-4FZrmmG0s",
+    authDomain: "vijay-6727f.firebaseapp.com",
+    databaseURL: "https://vijay-6727f-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "vijay-6727f",
+    storageBucket: "vijay-6727f.appspot.com",
+    messagingSenderId: "68450066325",
+    appId: "1:68450066325:web:e6ce31fde1ee5e55b7e09c"
+};
+// Check if Firebase is already initialized to prevent errors
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.database();
+
+let map, busMarker = null, studentMarker = null, routeLayer = null;
+let studentLat = null, studentLon = null;
+let lastUpdateTime = 0, isFirstRoute = true;
+let selectedBusId = new URLSearchParams(window.location.search).get('busId');
+
+// Check if a busId was passed
+if (!selectedBusId) {
+    alert("No bus selected. Redirecting to bus list.");
+    window.location.href = 'index.html';
+} else {
+    document.getElementById('headerText').textContent = `Tracking Bus ${selectedBusId.toUpperCase()}`;
+}
+
+/**
+ * Initializes the Leaflet map.
+ * @param {number} lat - Initial center latitude.
+ * @param {number} lon - Initial center longitude.
+ */
+function initMap(lat, lon) {
+    if (map) return; // Prevent re-initialization
+    map = L.map('map').setView([lat, lon], 13);
+    
+    const normal = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    // Add other map layers if needed (omitted for brevity, see original code)
+}
+
+/**
+ * Throttles the route drawing API call.
+ */
+function throttledDrawRoute(startLat, startLon, endLat, endLon) {
+    const now = Date.now();
+    // Only call the API every 10 seconds (10000 ms)
+    if (now - lastUpdateTime > 10000) {
+        drawRoute(startLat, startLon, endLat, endLon);
+        lastUpdateTime = now;
+    }
+}
+
+/**
+ * Calls Geoapify API to draw the route between two points.
+ */
+async function drawRoute(startLat, startLon, endLat, endLon) {
+    const url = `https://api.geoapify.com/v1/routing?waypoints=${startLat},${startLon}|${endLat},${endLon}&mode=drive&apiKey=${geoApiKey}`;
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (!data || !data.features || data.features.length === 0) {
+            document.getElementById("info").textContent = "❌ Route not found.";
+            return;
+        }
+        
+        // Remove previous route
+        if (routeLayer) map.removeLayer(routeLayer);
+        
+        // Convert GeoJSON coordinates to Leaflet format [lat, lon]
+        const coords = data.features[0].geometry.coordinates[0].map(c => [c[1], c[0]]);
+        routeLayer = L.polyline(coords, {
+            color: "#FFC107",
+            weight: 5
+        }).addTo(map);
+
+        if (isFirstRoute) {
+            map.fitBounds(routeLayer.getBounds());
+            isFirstRoute = false;
+        }
+
+        const props = data.features[0].properties;
+        const distanceKm = (props.distance / 1000).toFixed(2);
+        const durationMin = Math.round(props.time / 60);
+        
+        // Applying styled HTML to the info bar for better visual feedback
+        document.getElementById("info").innerHTML = `
+            🚌 Bus ${selectedBusId.toUpperCase()} | 
+            📏 **Distance**: ${distanceKm} km | 
+            ⏱️ **Estimated Arrival**: <span style="color: #f44336; font-weight: 700;">${durationMin} min</span>
+        `;
+
+    } catch (e) {
+        console.error("Error drawing route:", e);
+        document.getElementById("info").textContent = "⚠️ Error calculating route.";
+    }
+}
+
+
+/**
+ * Starts student location tracking and bus real-time tracking.
+ */
+function startTracking() {
+    if (!navigator.geolocation) {
+        alert("Geolocation not supported by your browser. ETA calculations will not work.");
+    }
+
+    // 1. Start continuous student location tracking
+    navigator.geolocation.watchPosition(pos => {
+        studentLat = pos.coords.latitude;
+        studentLon = pos.coords.longitude;
+        
+        if (!map) initMap(studentLat, studentLon);
+
+        if (map) {
+            // Student marker: Blue dot for 'You'
+            // The style tag overrides the inline blue color to green for better visibility
+            const newLatLng = [studentLat, studentLon];
+            const icon = L.divIcon({className: 'student-icon', html: '<div style="background-color: blue; width: 15px; height: 15px; border-radius: 50%; border: 2px solid white;"></div>', iconSize: [15, 15], iconAnchor: [7.5, 7.5]});
+            
+            if (!studentMarker) {
+                studentMarker = L.marker(newLatLng, {
+                    title: "You",
+                    icon: icon,
+                    zIndexOffset: 100 // Ensure student marker is always on top
+                }).addTo(map).bindPopup("📍 You are here").openPopup();
+            } else studentMarker.setLatLng(newLatLng);
+        }
+
+        // 3. Redraw route if the bus location is known
+        if (busMarker) {
+            const busLatLng = busMarker.getLatLng();
+            throttledDrawRoute(studentLat, studentLon, busLatLng.lat, busLatLng.lng);
+        } else if (studentLat != null) {
+            document.getElementById("info").textContent = "📍 Your location found. Waiting for bus update...";
+        }
+
+    }, (error) => {
+        console.error("Location permission denied or failed:", error);
+        document.getElementById("info").textContent = "⚠️ Location permission denied. Cannot calculate ETA.";
+    }, {
+        enableHighAccuracy: true
+    });
+
+
+    // 2. Start real-time bus location tracking
+    db.ref('Trips/' + selectedBusId).on('value', snap => {
+        const bus = snap.val();
+        if (!bus || !bus.latitude || !bus.longitude) {
+            document.getElementById("info").textContent = `Bus ${selectedBusId.toUpperCase()} location unavailable.`;
+            return;
+        }
+
+        const lat = bus.latitude,
+            lon = bus.longitude;
+
+        if (!map) {
+            // If map hasn't been initialized by student location, use bus location
+            initMap(lat, lon);
+        }
+
+        // Bus marker: Bus icon
+        // The style tag makes this emoji icon larger and orange
+        const busIcon = L.divIcon({
+            className: 'bus-icon',
+            html: '&#128652;', // Unicode bus emoji
+            iconSize: [30, 30], // Increased size for visibility
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -15]
+        });
+        
+        const newBusLatLng = [lat, lon];
+        
+        if (!busMarker) {
+            busMarker = L.marker(newBusLatLng, {
+                icon: busIcon
+            }).addTo(map).bindPopup(`🚌 Bus ${selectedBusId.toUpperCase()}`).openPopup();
+            // On first load, pan map to bus if student location is unknown
+            if (map && !studentMarker) map.setView(newBusLatLng, 13);
+        } else {
+            busMarker.setLatLng(newBusLatLng);
+        }
+        
+        // 4. Draw route if both locations are known
+        if (studentLat != null && studentLon != null) {
+            throttledDrawRoute(studentLat, studentLon, lat, lon);
+        } else {
+            document.getElementById("info").textContent = `🚌 Bus ${selectedBusId.toUpperCase()} is at Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}.`;
+            // Pan map to bus if student location is unknown
+            if (map && !studentMarker) map.setView([lat, lon], 13);
+        }
+
+    });
+}
+
+document.addEventListener('DOMContentLoaded', startTracking);
+</script>
+
+</body>
+</html>

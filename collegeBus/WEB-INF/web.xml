@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee 
+                             http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd"
+         version="3.1">
+
+    <!-- Welcome file (login page) -->
+    <welcome-file-list>
+        <welcome-file>login.html</welcome-file>
+    </welcome-file-list>
+
+    <!-- Login Servlet -->
+    <servlet>
+        <servlet-name>LoginServlet</servlet-name>
+        <servlet-class>LoginServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>LoginServlet</servlet-name>
+        <url-pattern>/LoginServlet</url-pattern>
+    </servlet-mapping>
+
+    <!-- Add Student Servlet -->
+    <servlet>
+        <servlet-name>AddStudentServlet</servlet-name>
+        <servlet-class>AddStudentServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>AddStudentServlet</servlet-name>
+        <url-pattern>/AddStudentServlet</url-pattern>
+    </servlet-mapping>
+
+    <!-- Delete Student Servlet -->
+    <servlet>
+        <servlet-name>DeleteStudentServlet</servlet-name>
+        <servlet-class>DeleteStudentServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>DeleteStudentServlet</servlet-name>
+        <url-pattern>/DeleteStudentServlet</url-pattern>
+    </servlet-mapping>
+
+    <!-- Search Student Servlet -->
+    <servlet>
+        <servlet-name>SearchStudentServlet</servlet-name>
+        <servlet-class>SearchStudentServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>SearchStudentServlet</servlet-name>
+        <url-pattern>/SearchStudentServlet</url-pattern>
+    </servlet-mapping>
+
+    <!-- All Students Servlet -->
+    <servlet>
+        <servlet-name>AllStudentsServlet</servlet-name>
+        <servlet-class>AllStudentsServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>AllStudentsServlet</servlet-name>
+        <url-pattern>/AllStudentsServlet</url-pattern>
+    </servlet-mapping>
+
+    <!-- Student Dashboard Servlet -->
+    <servlet>
+        <servlet-name>StudentDashboardServlet</servlet-name>
+        <servlet-class>StudentDashboardServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>StudentDashboardServlet</servlet-name>
+        <url-pattern>/StudentDashboardServlet</url-pattern>
+    </servlet-mapping>
+
+</web-app>

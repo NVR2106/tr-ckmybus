@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚌 Student Bus Tracker</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: Consolas, monospace; }
+html, body { height: 100%; width: 100%; overflow: hidden; color: #333; }
+
+.background-container {
+    position: fixed; top: 0; left: 0; height: 100%; width: 100%; z-index: -1;
+    background: url('bus-bg.jpeg') no-repeat center center fixed;
+    background-size: cover; transition: filter 0.5s ease-in-out;
+}
+
+#map { height: 100vh; width: 100vw; z-index: 1; display: none; }
+
+header {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(45,50,56,0.85); backdrop-filter: blur(8px); color: #fff;
+    padding: 10px 18px; border-radius: 10px; z-index: 1000; font-size: 1.1rem;
+    font-weight: 600; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    max-width: 400px; width: 90%;
+}
+
+#controls {
+    position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: row; gap: 12px; z-index: 1000;
+    background: rgba(255,255,255,0.15); backdrop-filter: blur(10px);
+    padding: 12px 16px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+}
+
+button, select { flex: 1; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px;
+    border: none; outline: none; transition: all 0.2s ease; font-weight: 600; }
+
+button { background-color: #FFC107; color: #333; cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,0.2);}
+button:hover { background-color: #E0A800; }
+
+select { background-color: #fff; color: #333; border: 1px solid #ccc; font-weight: 500; display: none; }
+
+#info {
+    position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+    background: rgba(255,193,7,0.9); backdrop-filter: blur(8px); color: #222;
+    padding: 20px 16px; border-radius: 8px; font-size: 1.85rem; font-weight: 600;
+    display: none; z-index: 1000; text-align: center; max-width: 90%;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+
+@media (max-width: 768px) {
+    header { font-size: 1rem; padding: 8px 12px; }
+    #controls { padding: 10px; gap: 8px; }
+    button, select { font-size: 0.8rem; padding: 6px 10px; }
+    #info { font-size: 0.75rem; padding: 8px 12px; }
+}
+@media (max-width: 600px) {
+    #controls { flex-direction: column; width: 90%; top: 70px; }
+    button, select { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="background-container"></div>
+
+<header>🚌 Student Bus Tracker</header>
+
+<div id="controls">
+    <button id="enableLocationBtn">📍 Enable My Location</button>
+    <select id="busSelect"><option value="">🚍 Select a Bus</option></select>
+</div>
+
+<div id="map"></div>
+<div id="info">Select a bus to view live distance, ETA, and route</div>
+
+<script>
+const geoApiKey = "04aaf602f38946b0b3a34f2b37bb5633";
+
+// Firebase setup
+const firebaseConfig = {
+    apiKey: "AIzaSyCYYUoSTCBRAZ7DRctIKPkXN-4FZrmmG0s",
+    authDomain: "vijay-6727f.firebaseapp.com",
+    databaseURL: "https://vijay-6727f-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "vijay-6727f",
+    storageBucket: "vijay-6727f.appspot.com",
+    messagingSenderId: "68450066325",
+    appId: "1:68450066325:web:e6ce31fde1ee5e55b7e09c"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let map, busMarker=null, studentMarker=null, routeLayer=null;
+let currentListener=null, studentLat=null, studentLon=null;
+let lastUpdateTime = 0, isFirstRoute = true;
+
+// Initialize Map
+function initMap(lat, lon){
+    document.getElementById('map').style.display='block';
+    map = L.map('map').setView([lat, lon], 13);
+    const normal = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{
+        attribution: 'Tiles © Esri'
+    });
+    const labels = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',{
+        attribution: '© OpenStreetMap contributors © CARTO', subdomains:'abcd', maxZoom:20
+    });
+    const satelliteWithLabels = L.layerGroup([satellite,labels]);
+    L.control.layers({"🗺️ Normal": normal,"🛰️ Satellite": satelliteWithLabels}).addTo(map);
+}
+
+// Throttled route update
+function throttledDrawRoute(startLat,startLon,endLat,endLon){
+    const now = Date.now();
+    if(now - lastUpdateTime > 10000){ // every 10 sec
+        drawRoute(startLat,startLon,endLat,endLon);
+        lastUpdateTime = now;
+    }
+}
+
+// Draw Route
+async function drawRoute(startLat,startLon,endLat,endLon){
+    const url=`https://api.geoapify.com/v1/routing?waypoints=${startLat},${startLon}|${endLat},${endLon}&mode=drive&apiKey=${geoApiKey}`;
+    try{
+        const res = await fetch(url);
+        const data = await res.json();
+        if(!data || !data.features || data.features.length===0){
+            document.getElementById("info").textContent="❌ Route not found.";
+            return;
+        }
+        if(routeLayer) map.removeLayer(routeLayer);
+        const coords = data.features[0].geometry.coordinates[0].map(c=>[c[1],c[0]]);
+        routeLayer = L.polyline(coords,{color:"#FFC107",weight:5}).addTo(map);
+
+        if(isFirstRoute){
+            map.fitBounds(routeLayer.getBounds());
+            isFirstRoute = false;
+        }
+
+        const props = data.features[0].properties;
+        const distanceKm = (props.distance/1000).toFixed(2);
+        const durationMin = Math.round(props.time/60);
+        document.getElementById("info").textContent=`📏 Distance: ${distanceKm} km | ⏱️ ETA: ${durationMin} min`;
+
+    }catch(e){
+        console.error("Error drawing route:",e);
+        document.getElementById("info").textContent="⚠️ Error calculating route.";
+    }
+}
+
+// Enable student location
+document.getElementById('enableLocationBtn').addEventListener('click',()=>{
+    if(!navigator.geolocation) return alert("Geolocation not supported.");
+    document.querySelector('.background-container').style.display='none';
+    navigator.geolocation.watchPosition(pos=>{
+        studentLat = pos.coords.latitude;
+        studentLon = pos.coords.longitude;
+        document.getElementById('busSelect').style.display="block";
+        document.getElementById('info').style.display="block";
+        document.getElementById('enableLocationBtn').style.display="none";
+
+        if(!map) initMap(studentLat,studentLon);
+
+        if(!studentMarker){
+            studentMarker=L.marker([studentLat,studentLon],{title:"You"}).addTo(map).bindPopup("📍 You are here").openPopup();
+        } else studentMarker.setLatLng([studentLat,studentLon]);
+
+        if(busMarker){
+            const busLatLng = busMarker.getLatLng();
+            throttledDrawRoute(studentLat,studentLon,busLatLng.lat,busLatLng.lng);
+        }
+    },()=>alert("Location permission denied."),{enableHighAccuracy:true});
+});
+
+// Populate bus dropdown
+db.ref('Trips').orderByChild('isActive').equalTo(true).once('value').then(snapshot=>{
+    snapshot.forEach(busSnap=>{
+        const trip=busSnap.val();
+        const option=document.createElement('option');
+        option.value=busSnap.key;
+        option.textContent=`${trip.busId} — ${trip.route}`;
+        document.getElementById('busSelect').appendChild(option);
+    });
+});
+
+// Bus selection
+document.getElementById('busSelect').addEventListener('change',function(){
+    const busId = this.value;
+    if(!busId) return;
+    if(currentListener) db.ref('Trips/'+currentListener).off('value');
+    currentListener = busId;
+
+    db.ref('Trips/'+busId).on('value',snap=>{
+        const bus = snap.val();
+        if(!bus || !bus.latitude || !bus.longitude) return;
+        const lat=bus.latitude, lon=bus.longitude;
+        if(!busMarker){
+            busMarker=L.marker([lat,lon]).addTo(map).bindPopup("🚌 "+bus.busId).openPopup();
+        } else busMarker.setLatLng([lat,lon]);
+
+        if(studentLat!=null && studentLon!=null){
+            throttledDrawRoute(studentLat,studentLon,lat,lon);
+        } else document.getElementById("info").textContent="📍 Enable your location first.";
+    });
+});
+</script>
+
+</body>
+</html>
